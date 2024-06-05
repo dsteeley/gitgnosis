@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.86"
 dotenvy = "0.15.7"
+git2 = "0.18.3"
 openai_api_rust = "0.1.9"
-palm_api = {path = "../palm_api"}
-# palm_api = { git = "https://github.com/dsteeley/palm_api.git"}
+# palm_api = {path = "../palm_api"}
+palm_api = {version = "0.2.2", features = ['rustls-tls'], no-default-features = true}

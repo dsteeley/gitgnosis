@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use openai_api_rust::*;
 use openai_api_rust::chat::*;
 use openai_api_rust::completions::*;
@@ -58,16 +60,56 @@ pub fn query_palm(content: String) -> Result<String> {
     Ok(response.candidates.unwrap()[0].output.clone())
 }
 
+pub fn list_commits() -> Result<HashMap<git2::Oid, String>> {
+    // Run git log --oneline to get all commits
+    // Put all the strings into a HashMap of Commit ID, String
+    // Return the HashMap
+    let mut commits = HashMap::new();
+    // TODO support specifying the repo path
+    let repo = git2::Repository::open(".")?;
+    repo.references()?
+        .for_each(|reference| {
+            let reference: git2::Reference = reference.unwrap();
+            println!("Reference: {:?}", reference.name());
+            match reference.target() {
+                Some(target) => {
+                    let commit = repo.find_commit(target).unwrap();
+                    let message = commit.message().unwrap();
+                    commits.insert(commit.id(), message.to_string());
+                }
+                None => {
+                    let resolved_ref = reference.resolve().unwrap();
+                    println!("Resolved ref: {:?}", resolved_ref.target());
+                    let commit = repo.find_commit(resolved_ref.target().unwrap()).unwrap();
+                    let message = commit.message().unwrap();
+                    commits.insert(commit.id(), message.to_string());
+                }
+            }
+        });
+    let mut walker = repo.revwalk()?;
+    walker.push_head()?;
+
+    Ok(commits)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn it_works() {
+    fn hello_world() {
         let content = "Hello".to_string();
         // Run the test on Palm as that's currently free to use for some developers.
         let result = query_palm(content).unwrap();
         println!("{}", result);
         assert!(result.contains("Hello"));
+    }
+
+    #[test]
+    fn test_commits() {
+        let commits = list_commits().unwrap();
+        for (commit_id, message) in commits {
+            println!("{}: {}", commit_id, message);
+        }
     }
 }
