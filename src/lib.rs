@@ -52,8 +52,6 @@ Here is a third example of an unreleased changelog section.
 
 "#;
 
-// const PROMPT_SUFFIX: &str = "Please summarise each commit in a single sentence in the format of a CHANGELOG unreleased section categorising each commit into breaking change, added or fixed.";
-
 // Todo investigate other auth mechanisms for apis
 pub fn auth() -> Auth {
     // Dot in a .env file
