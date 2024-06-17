@@ -52,54 +52,104 @@ Here is a third example of an unreleased changelog section.
 
 "#;
 
-// Todo investigate other auth mechanisms for apis
-pub fn auth() -> Auth {
-    // Dot in a .env file
-    // dotenv().expect(".env file not found");
-    Auth::from_env().unwrap()
+pub fn new_palm() -> PalmLlm {
+    PalmLlm::new()
 }
 
-// TODO better return type
-// TODO split into one object and have trait per model
-pub fn query_openapi(content: String) -> Result<String> {
-    let auth = auth();
-    // TODO add support for other llms
-    let openai = OpenAI::new(auth, "https://api.openai.com/v1/");
-    // TODO other models
-    let body = ChatBody {
-        model: "gpt-3.5-turbo".to_string(),
-        max_tokens: Some(20),
-        temperature: Some(0_f32),
-        top_p: Some(0_f32),
-        n: Some(2),
-        stream: Some(false),
-        stop: None,
-        presence_penalty: None,
-        frequency_penalty: None,
-        logit_bias: None,
-        user: None,
-        messages: vec![Message {
-            role: Role::User,
-            content,
-        }],
-    };
-    let rs = openai.chat_completion_create(&body);
-    let choice = rs.unwrap().choices;
-    // TODO Error handling
-    let message = &choice[0].message.as_ref().unwrap().content;
-    Ok(message.to_string())
+pub trait Llm {
+    // Each Llm must implement these
+    fn new() -> Self;
+    fn auth() -> Option<Auth>;
+    fn query(&self, content: String) -> Result<String>;
+
+    // Trait functions
+    fn generate_changelog_section(&self) -> Result<String> {
+        let commits = list_commits()?;
+        let commit_prompt = Self::commits_to_prompt_string(commits);
+        let prompt = PROMPT_PREFIX.to_string() + &commit_prompt + PROMPT_EXAMPLE_CHANGELOG;
+        let result = self.query(prompt)?;
+        Ok(result)
+    }
+
+    fn commits_to_prompt_string(commits: HashMap<String, String>) -> String {
+        let mut prompt = String::new();
+        for (commit_id, message) in commits {
+            prompt.push_str(&format!("- {}:{}\n", commit_id, message));
+        }
+        prompt
+    }
+
 }
 
-pub fn query_palm(content: String) -> Result<String> {
-    dotenv().expect(".env file not found");
-    let palm_api_key = std::env::var("PALM_API_KEY").unwrap();
-    let client = create_client(palm_api_key.to_string());
-    let mut textbody = new_text_body();
-    textbody.set_text_prompt(content);
-    let response = client
-        .generate_text("text-bison-001".to_string(), textbody)
-        .expect("An error has occured.");
-    Ok(response.candidates.unwrap()[0].output.clone())
+pub struct OpenAiLlm;
+impl Llm for OpenAiLlm {
+    fn new() -> Self {
+        // Create a new OpenAI object
+        Self
+    }
+
+    // Todo investigate other auth mechanisms for apis
+    fn auth() -> Option<Auth> {
+        // Dot in a .env file
+        dotenv().expect(".env file not found");
+        Some(Auth::from_env().unwrap())
+    }
+
+    // TODO better return type
+    fn query(&self, content: String) -> Result<String> {
+        let auth = Self::auth().unwrap();
+        let openai = OpenAI::new(auth, "https://api.openai.com/v1/");
+        let body = ChatBody {
+            model: "gpt-3.5-turbo".to_string(),
+            max_tokens: Some(20),
+            temperature: Some(0_f32),
+            top_p: Some(0_f32),
+            n: Some(2),
+            stream: Some(false),
+            stop: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            logit_bias: None,
+            user: None,
+            messages: vec![Message {
+                role: Role::User,
+                content,
+            }],
+        };
+        let rs = openai.chat_completion_create(&body);
+        let choice = rs.unwrap().choices;
+        // TODO Error handling
+        let message = &choice[0].message.as_ref().unwrap().content;
+        Ok(message.to_string())
+    }
+
+}
+
+pub struct PalmLlm;
+impl Llm for PalmLlm {
+    fn new() -> Self {
+        // Create a new OpenAI object
+        Self
+    }
+
+    // Todo investigate other auth mechanisms for apis
+    fn auth() -> Option<Auth> {
+        // Dot in a .env file
+        dotenv().expect(".env file not found");
+        None
+    }
+
+    fn query(&self, content: String) -> Result<String> {
+        Self::auth();
+        let palm_api_key = std::env::var("PALM_API_KEY").unwrap();
+        let client = create_client(palm_api_key.to_string());
+        let mut textbody = new_text_body();
+        textbody.set_text_prompt(content);
+        let response = client
+            .generate_text("text-bison-001".to_string(), textbody)
+            .expect("An error has occured.");
+        Ok(response.candidates.unwrap()[0].output.clone())
+    }
 }
 
 fn list_commits() -> Result<HashMap<String, String>> {
@@ -126,22 +176,6 @@ fn list_commits() -> Result<HashMap<String, String>> {
     Ok(commits)
 }
 
-fn commits_to_prompt_string(commits: HashMap<String, String>) -> String {
-    let mut prompt = String::new();
-    for (commit_id, message) in commits {
-        prompt.push_str(&format!("- {}:{}\n", commit_id, message));
-    }
-    prompt
-}
-
-pub fn generate_changelog_section() -> Result<String> {
-    let commits = list_commits()?;
-    let commit_prompt = commits_to_prompt_string(commits);
-    let prompt = PROMPT_PREFIX.to_string() + &commit_prompt + PROMPT_EXAMPLE_CHANGELOG;
-    let result = query_palm(prompt)?;
-    Ok(result)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -150,14 +184,15 @@ mod tests {
     fn hello_world() {
         let content = "Hello".to_string();
         // Run the test on Palm as that's currently free to use for some developers.
-        let result = query_palm(content).unwrap();
+        let palm_llm = new_palm();
+        let result = palm_llm.query(content).unwrap();
         println!("{}", result);
         assert!(result.contains("Hello"));
     }
 
     #[test]
     fn test_generate_changelog_section() {
-        let result = generate_changelog_section().unwrap();
+        let result = PalmLlm::new().generate_changelog_section().unwrap();
         println!("{}", result);
     }
 }
